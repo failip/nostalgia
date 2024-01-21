@@ -105,7 +105,8 @@ bool Engine::is_running() const {
 }
 
 Engine::Engine(const u_int32_t width, const u_int32_t height) : m_width(width), m_height(height) {
-
+    m_uniforms.screen_width = m_width;
+    m_uniforms.screen_height = m_height;
 }
 
 bool Engine::init_window_and_device() {
@@ -332,7 +333,12 @@ bool Engine::init_textures() {
     }
 
     std::filesystem::path tilemap_path = std::filesystem::path(RESOURCE_DIR "/tilemaps/map.tmj");
-    m_tilemap_texture = TextureLoader::load_tilemap_as_texture(tilemap_path, m_device, &m_tilemap_texture_view);
+    auto tilemap = TilemapLoader::load_tilemap(tilemap_path);
+    m_uniforms.tilemap_width = tilemap.width;
+    m_uniforms.tilemap_height = tilemap.height;
+    m_uniforms.number_of_layers = tilemap.number_of_layers;
+    m_tilemap_texture = TextureLoader::load_tilemap_as_texture(tilemap, m_device, &m_tilemap_texture_view);
+
     if (!m_tilemap_texture) {
         std::cerr << "Could not load tilemap texture!" << std::endl;
         return false;
@@ -379,7 +385,7 @@ bool Engine::init_buffers() {
     buffer_description.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
     buffer_description.mappedAtCreation = false;
     m_uniform_buffer = m_device.createBuffer(buffer_description);
-
+    
     m_uniforms.time = 1.0f;
     m_queue.writeBuffer(m_uniform_buffer, 0, &m_uniforms, sizeof(MyUniforms));
 
@@ -426,6 +432,8 @@ void Engine::resize_screen(const u_int32_t width, const u_int32_t height) {
 
     m_width = width / 2;
     m_height = height / 2;
+    m_uniforms.screen_width = m_width;
+    m_uniforms.screen_height = m_height;
 
     init_swap_chain();
 }

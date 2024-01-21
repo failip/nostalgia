@@ -13,8 +13,14 @@ struct VertexOutput {
  * A structure holding the value of our uniforms
  */
 struct MyUniforms {
-	color: vec3f,
+	tilemap_width: f32,
+	tilemap_height: f32,
+	tilemap_number_of_layers: f32,
+	pad_: f32,
 	time: f32,
+	screen_width: f32,
+	screen_height: f32,
+	pad__: f32,
 };
 
 // Instead of the simple uTime variable, our uniform variable is a struct
@@ -34,13 +40,13 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
-	let number_of_layers = 2;
+	let number_of_layers = i32(uMyUniforms.tilemap_number_of_layers);
+	let width = u32(uMyUniforms.tilemap_width);
+	let height = u32(uMyUniforms.tilemap_height);
 
 	var color = vec3f(0.0, 0.0, 0.0);
 
 	for (var i = 0; i < number_of_layers; i++) {
-		let width = u32(40);
-		let height = u32(30);
 		let layer_offset = vec2i(0, i * 30);
 
 		// Color by position
@@ -62,8 +68,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 		let texture_color = textureLoad(uTexture, offset_texture_coord, 0);
 		color = mix(color, texture_color.rgb, texture_color.a);
 	}
-
-
 
 	// Gamma-correction
 	// let corrected_color = pow(color, vec3f(2.2));

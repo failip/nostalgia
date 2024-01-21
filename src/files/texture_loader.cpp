@@ -56,11 +56,14 @@ wgpu::Texture TextureLoader::load_texture(const path &path, wgpu::Device device,
 
 wgpu::Texture TextureLoader::load_tilemap_as_texture(const path &path, wgpu::Device device, wgpu::TextureView *pTextureView) {
     using namespace wgpu;
-
     TilemapLoader::Tilemap tilemap = TilemapLoader::load_tilemap(path);
+    return load_tilemap_as_texture(tilemap, device, pTextureView);
+}
+
+wgpu::Texture TextureLoader::load_tilemap_as_texture(TilemapLoader::Tilemap tilemap, wgpu::Device device, wgpu::TextureView *pTextureView) {
+    using namespace wgpu;
     int width = tilemap.width;
     int height = tilemap.height * tilemap.number_of_layers;
-
     TextureDescriptor textureDesc;
     textureDesc.dimension = TextureDimension::_2D;
     textureDesc.format = TextureFormat::R32Uint;
