@@ -34,23 +34,36 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
-	// Color by position
-	let texture_coord = vec2u(in.position.xy) % vec2u(16, 16);
-	let tilemap_coord = vec2i(in.position.xy) / vec2i(16, 16);
+	let number_of_layers = 2;
 
-	let number_of_layers = u32(2);
+	var color = vec3f(0.0, 0.0, 0.0);
 
-	let texture_coord_one_dimensional = textureLoad(uTilemap, tilemap_coord, 0).r - 1;
+	for (var i = 0; i < number_of_layers; i++) {
+		let width = u32(40);
+		let height = u32(30);
+		let layer_offset = vec2i(0, i * 30);
 
-	let width = u32(40);
-	let height = u32(30);
+		// Color by position
+		let texture_coord = vec2u(in.position.xy) % vec2u(16, 16);
+		let tilemap_coord = vec2i(in.position.xy) / vec2i(16, 16) + layer_offset;
+		let tilemap_data = textureLoad(uTilemap, tilemap_coord, 0).r;
+		
+		if (tilemap_data == u32(0)) {
+			continue;
+		}
 
-	let texture_coord_two_dim = vec2u(texture_coord_one_dimensional % width, 
-									  texture_coord_one_dimensional / width);
+		let texture_coord_one_dimensional = tilemap_data - 1;
 
-	let offset_texture_coord = texture_coord_two_dim * 16 + texture_coord;
+		let texture_coord_two_dim = vec2u(texture_coord_one_dimensional % width, 
+										texture_coord_one_dimensional / width);
 
-	let color = textureLoad(uTexture, offset_texture_coord, 0).rgb;
+		let offset_texture_coord = texture_coord_two_dim * 16 + texture_coord;
+
+		let texture_color = textureLoad(uTexture, offset_texture_coord, 0);
+		color = mix(color, texture_color.rgb, texture_color.a);
+	}
+
+
 
 	// Gamma-correction
 	// let corrected_color = pow(color, vec3f(2.2));

@@ -18,5 +18,7 @@ wgpu::ShaderModule ShaderLoader::load_shader_module(const path &path, wgpu::Devi
     shader_code_descriptor.code = shaderSource.c_str();
     wgpu::ShaderModuleDescriptor shader_descriptor;
     shader_descriptor.nextInChain = &shader_code_descriptor.chain;
-    return device.createShaderModule(shader_descriptor);
+    wgpu::ShaderModule shader = device.createShaderModule(shader_descriptor);
+    return shader;
+
 };

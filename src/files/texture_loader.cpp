@@ -59,7 +59,7 @@ wgpu::Texture TextureLoader::load_tilemap_as_texture(const path &path, wgpu::Dev
 
     TilemapLoader::Tilemap tilemap = TilemapLoader::load_tilemap(path);
     int width = tilemap.width;
-    int height = tilemap.height;
+    int height = tilemap.height * tilemap.number_of_layers;
 
     TextureDescriptor textureDesc;
     textureDesc.dimension = TextureDimension::_2D;
