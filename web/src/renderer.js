@@ -3,8 +3,7 @@ async function load_map() {
 	const map = await response.json();
 
 	const number_of_layers = map.layers.length;
-
-	const height = map.layers[0].height * number_of_layers;
+	const height = map.layers[0].height;
 	const width = map.layers[0].width;
 
 	const tile_data = new Uint32Array(height * width * number_of_layers);
@@ -48,12 +47,19 @@ async function initialize_webgpu() {
 			{
 				binding: 0,
 				visibility: GPUShaderStage.FRAGMENT,
+				buffer: {
+					type: 'uniform',
+				},
+			},
+			{
+				binding: 1,
+				visibility: GPUShaderStage.FRAGMENT,
 				texture: {
 					sampleType: 'float',
 				},
 			},
 			{
-				binding: 1,
+				binding: 2,
 				visibility: GPUShaderStage.FRAGMENT,
 				texture: {
 					sampleType: 'uint',
@@ -109,11 +115,12 @@ async function initialize_webgpu() {
 	const tilemap = new Uint32Array((await map).data);
 	const tilemap_height = (await map).height;
 	const tilemap_width = (await map).width;
+	const number_of_layers = (await map).number_of_layers;
 
 	const tilemap_texture = device.createTexture({
 		size: {
 			width: tilemap_width,
-			height: tilemap_height,
+			height: tilemap_height * number_of_layers,
 		},
 		format: 'r32uint',
 		usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
@@ -129,23 +136,40 @@ async function initialize_webgpu() {
 		},
 		{
 			width: tilemap_width,
-			height: tilemap_height,
+			height: tilemap_height * number_of_layers,
 		},
 	);
 
-	const uniform_bind_group = device.createBindGroup({
+	const uniform_buffer = device.createBuffer({
+		size: 8 * 4,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+	});
+
+	const screen_width = canvas.width;
+	const screen_height = canvas.height;
+	const uniform_data = new Float32Array([tilemap_width, tilemap_height, number_of_layers, window.devicePixelRatio, 0.0, screen_width, screen_height, 1.0]);
+
+	const bind_group = device.createBindGroup({
 		layout: pipeline.getBindGroupLayout(0),
 		entries: [
 			{
 				binding: 0,
-				resource: tileset_texture.createView(),
+				resource: {
+					buffer: uniform_buffer,
+				},
 			},
 			{
 				binding: 1,
+				resource: tileset_texture.createView(),
+			},
+			{
+				binding: 2,
 				resource: tilemap_texture.createView(),
 			},
 		],
 	});
+
+	device.queue.writeBuffer(uniform_buffer, 0, uniform_data.buffer, 0, uniform_data.byteLength);
 
 	function frame() {
 		const command_encoder = device.createCommandEncoder();
@@ -164,7 +188,7 @@ async function initialize_webgpu() {
 
 		const pass_encoder = command_encoder.beginRenderPass(render_pass_descriptor);
 		pass_encoder.setPipeline(pipeline);
-		pass_encoder.setBindGroup(0, uniform_bind_group);
+		pass_encoder.setBindGroup(0, bind_group);
 		pass_encoder.draw(6);
 		pass_encoder.end();
 
