@@ -6,7 +6,11 @@ struct Uniforms {
 	time: f32,
 	screen_width: f32,
 	screen_height: f32,
+	pad_: f32,
+	offset_x: f32,
+	offset_y: f32,
 	pad__: f32,
+	pad___: f32
 };
 
 @group(0) @binding(0) var<uniform> uUniforms: Uniforms;
@@ -20,27 +24,35 @@ struct VertexInput {
 
 struct VertexOutput {
 	@builtin(position) position: vec4f,
-	@location(0) color: vec3f,
-	@location(1) texcoord: vec2f,
+	@location(0) uv: vec2f,
 };
 
 @vertex
 fn vs_main(
   @builtin(vertex_index) VertexIndex : u32
 ) -> VertexOutput {
-  var pos = array<vec2<f32>, 6>(
-    vec2<f32>(-1.0, -1.0),
-    vec2<f32>(1.0, -1.0),
-    vec2<f32>(-1.0, 1.0),
-    vec2<f32>(-1.0, 1.0),
-    vec2<f32>(1.0, -1.0),
-    vec2<f32>(1.0, 1.0)
-  );
+	const uv = array<vec2<f32>, 6>(
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(0.0, 0.0)
+    );
 
-  var out: VertexOutput;
-  var position = vec4<f32>(pos[VertexIndex], 0.0, 1.0);
+	var pos = array<vec2<f32>, 6>(
+		vec2<f32>(-1.0, -1.0),
+		vec2<f32>(1.0, -1.0),
+		vec2<f32>(-1.0, 1.0),
+		vec2<f32>(-1.0, 1.0),
+		vec2<f32>(1.0, -1.0),
+		vec2<f32>(1.0, 1.0)
+	);
+
+	var out: VertexOutput;
+	var position = vec4<f32>(pos[VertexIndex], 0.0, 1.0);
 	out.position = position * 0.5;
-	out.texcoord = position.xy * 0.5 + 0.5;
+	out.uv = uv[VertexIndex];
 	return out;
 }
 
@@ -50,23 +62,27 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
   	let width = u32(uUniforms.tilemap_width);
 	let height = u32(uUniforms.tilemap_height);
 	let scaling = uUniforms.scaling;
+	let offset = vec2(uUniforms.offset_x, uUniforms.offset_y);
 
 	var color = vec3f(0.0, 0.0, 0.0);
 
-	if (in.position.x > uUniforms.tilemap_width * 16.0 * scaling) {
-		return vec4f(0.0, 0.0, 0.0, 1.0);
-	}
+	// if (in.position.x > uUniforms.tilemap_width * 16.0) {
+	// 	return vec4f(0.0, 0.0, 0.0, 1.0);
+	// }
 
-	if (in.position.y > uUniforms.tilemap_height * 16.0 * scaling) {
-		return vec4f(0.0, 0.0, 0.0, 1.0);
-	}
+	// if (in.position.y > uUniforms.tilemap_height * 16.0) {
+	// 	return vec4f(0.0, 0.0, 0.0, 1.0);
+	// }
+
+	let inverted_uv = vec2(1.0 - in.uv.x, in.uv.y);
+	let pixel_position = in.position.xy / 2.0;
 
 	for (var i = 0; i < number_of_layers; i++) {
 		let layer_offset = vec2i(0, i * 30);
 
 		// Color by position
-		let texture_coord = vec2u(in.position.xy / scaling) % vec2u(16, 16);
-		let tilemap_coord = vec2i(in.position.xy / scaling) / vec2i(16, 16) + layer_offset;
+		let texture_coord = vec2u((pixel_position + offset)) % vec2u(16, 16);
+		let tilemap_coord = vec2i((pixel_position + offset)) / vec2i(16, 16) + layer_offset;
 		let tilemap_data = textureLoad(uTilemap, tilemap_coord, 0).r;
 		
 		if (tilemap_data == u32(0)) {
@@ -84,5 +100,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 		color = mix(color, texture_color.rgb, texture_color.a);
 	}
   
-  return vec4f(color, 1.0);
+  return vec4<f32>(color, 1.0);
+//   return vec4<f32>(0.2, 0.2, 0.2, 1.0);	
 }
