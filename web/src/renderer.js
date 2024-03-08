@@ -24,8 +24,11 @@ async function load_map() {
 }
 
 async function initialize_webgpu() {
-	const shader = fetch('shader/shader.wgsl').then((response) => response.text());
-	const texture = fetch('resources/textures/overworld.png').then((response) => response.blob());
+	const tilemap_shader = fetch('shader/tilemap.wgsl').then((response) => response.text());
+	const sprite_shader = fetch('shader/sprite.wgsl').then((response) => response.text());
+	const mix_shader = fetch('shader/mix.wgsl').then((response) => response.text());
+	const tileset_texture_image = fetch('resources/textures/overworld.png').then((response) => response.blob());
+	const sprite_texture_image = fetch('resources/textures/link.png').then((response) => response.blob());
 	const map = load_map();
 	const adapter = await navigator.gpu.requestAdapter();
 	const device = await adapter.requestDevice();
@@ -42,7 +45,7 @@ async function initialize_webgpu() {
 		alphaMode: 'premultiplied',
 	});
 
-	const layout = device.createBindGroupLayout({
+	const tilemap_layout = device.createBindGroupLayout({
 		entries: [
 			{
 				binding: 0,
@@ -68,21 +71,21 @@ async function initialize_webgpu() {
 		],
 	});
 
-	const pipeline_layout = device.createPipelineLayout({
-		bindGroupLayouts: [layout],
+	const tilemap_pipeline_layout = device.createPipelineLayout({
+		bindGroupLayouts: [tilemap_layout],
 	});
 
-	const pipeline = device.createRenderPipeline({
-		layout: pipeline_layout,
+	const tilemap_pipeline = device.createRenderPipeline({
+		layout: tilemap_pipeline_layout,
 		vertex: {
 			module: device.createShaderModule({
-				code: await shader,
+				code: await tilemap_shader,
 			}),
 			entryPoint: 'vs_main',
 		},
 		fragment: {
 			module: device.createShaderModule({
-				code: await shader,
+				code: await tilemap_shader,
 			}),
 			entryPoint: 'fs_main',
 			targets: [
@@ -96,7 +99,7 @@ async function initialize_webgpu() {
 		},
 	});
 
-	const tileset_bitmap = await createImageBitmap(await texture);
+	const tileset_bitmap = await createImageBitmap(await tileset_texture_image);
 	const tileset_texture = device.createTexture({
 		size: {
 			width: tileset_bitmap.width,
@@ -140,22 +143,25 @@ async function initialize_webgpu() {
 		},
 	);
 
-	const uniform_buffer = device.createBuffer({
-		size: 8 * 4,
+	const tilemap_uniform_buffer = device.createBuffer({
+		size: 12 * 4,
 		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 	});
 
 	const screen_width = canvas.width;
 	const screen_height = canvas.height;
-	const uniform_data = new Float32Array([tilemap_width, tilemap_height, number_of_layers, window.devicePixelRatio, 0.0, screen_width, screen_height, 1.0]);
+	const tilemap_uniform_data = new Float32Array(
+		[tilemap_width, tilemap_height, number_of_layers, 1.0,
+			0.0, screen_width, screen_height, 1.0,
+			0.0, 0.0, 1.0, 1.0]);
 
-	const bind_group = device.createBindGroup({
-		layout: pipeline.getBindGroupLayout(0),
+	const tilemap_bind_group = device.createBindGroup({
+		layout: tilemap_pipeline.getBindGroupLayout(0),
 		entries: [
 			{
 				binding: 0,
 				resource: {
-					buffer: uniform_buffer,
+					buffer: tilemap_uniform_buffer,
 				},
 			},
 			{
@@ -169,13 +175,113 @@ async function initialize_webgpu() {
 		],
 	});
 
-	device.queue.writeBuffer(uniform_buffer, 0, uniform_data.buffer, 0, uniform_data.byteLength);
+	device.queue.writeBuffer(tilemap_uniform_buffer, 0, tilemap_uniform_data.buffer, 0, tilemap_uniform_data.byteLength);
+
+	const sprite_layout = device.createBindGroupLayout({
+		entries: [
+			{
+				binding: 0,
+				visibility: GPUShaderStage.FRAGMENT,
+				texture: {
+					sampleType: 'float',
+				},
+			},
+			{
+				binding: 1,
+				visibility: GPUShaderStage.FRAGMENT,
+				sampler: {
+					type: 'filtering',
+				},
+			},
+			{
+				binding: 2,
+				visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX,
+				buffer: {
+					type: 'uniform',
+				},
+			},
+		],
+	});
+
+	const sprite_pipeline_layout = device.createPipelineLayout({
+		bindGroupLayouts: [sprite_layout],
+	});
+
+	const sprite_pipeline = device.createRenderPipeline({
+		layout: sprite_pipeline_layout,
+		vertex: {
+			module: device.createShaderModule({
+				code: await sprite_shader,
+			}),
+			entryPoint: 'vs_main',
+		},
+		fragment: {
+			module: device.createShaderModule({
+				code: await sprite_shader,
+			}),
+			entryPoint: 'fs_main',
+			targets: [
+				{
+					format: presentation_format,
+				},
+			],
+		},
+		primitive: {
+			topology: 'triangle-list',
+		},
+	});
+
+	const sprite_bitmap = await createImageBitmap(await sprite_texture_image);
+	const sprite_texture = device.createTexture({
+		size: {
+			width: sprite_bitmap.width,
+			height: sprite_bitmap.height,
+		},
+		format: 'rgba8unorm',
+		usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+	});
+
+	device.queue.copyExternalImageToTexture(
+		{ source: sprite_bitmap },
+		{ texture: sprite_texture },
+		{ width: sprite_bitmap.width, height: sprite_bitmap.height },
+	);
+
+	const sprite_uniform_buffer = device.createBuffer({
+		size: 8 * 4,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+	});
+
+	const sprite_uniform_data = new Float32Array([screen_width / 2.0, screen_height / 2.0, sprite_bitmap.width, sprite_bitmap.height, 0.0, 0.0, 0.0, 0.0]);
+
+	const sprite_bind_group = device.createBindGroup({
+		layout: sprite_pipeline.getBindGroupLayout(0),
+		entries: [
+			{
+				binding: 0,
+				resource: sprite_texture.createView(),
+			},
+			{
+				binding: 1,
+				resource: device.createSampler({
+					magFilter: 'nearest',
+					minFilter: 'nearest',
+				}),
+			},
+			{
+				binding: 2,
+				resource: {
+					buffer: sprite_uniform_buffer,
+				},
+			},
+		],
+	});
 
 	function frame() {
 		const command_encoder = device.createCommandEncoder();
 		const texture_view = context.getCurrentTexture().createView();
 
-		const render_pass_descriptor = {
+		const tilemap_pass_descriptor = {
 			colorAttachments: [
 				{
 					view: texture_view,
@@ -186,12 +292,22 @@ async function initialize_webgpu() {
 			],
 		};
 
-		const pass_encoder = command_encoder.beginRenderPass(render_pass_descriptor);
-		pass_encoder.setPipeline(pipeline);
-		pass_encoder.setBindGroup(0, bind_group);
+		tilemap_uniform_data[4] = performance.now() / 1000.0;
+
+		sprite_uniform_data[4] = (Math.sin(performance.now() / 5000.0) + 1.0) / 2.0 * ((screen_width) / 2.0 - sprite_bitmap.width);
+		sprite_uniform_data[5] = (Math.cos(performance.now() / 5000.0) + 1.0) / 2.0 * ((screen_height / 2.0) - sprite_bitmap.height);
+
+		device.queue.writeBuffer(tilemap_uniform_buffer, 0, tilemap_uniform_data.buffer, 0, tilemap_uniform_data.byteLength);
+		device.queue.writeBuffer(sprite_uniform_buffer, 0, sprite_uniform_data.buffer, 0, sprite_uniform_data.byteLength);
+
+		const pass_encoder = command_encoder.beginRenderPass(tilemap_pass_descriptor);
+		pass_encoder.setPipeline(tilemap_pipeline);
+		pass_encoder.setBindGroup(0, tilemap_bind_group);
+		pass_encoder.draw(6);
+		pass_encoder.setPipeline(sprite_pipeline);
+		pass_encoder.setBindGroup(0, sprite_bind_group);
 		pass_encoder.draw(6);
 		pass_encoder.end();
-
 		device.queue.submit([command_encoder.finish()]);
 		requestAnimationFrame(frame);
 	}
